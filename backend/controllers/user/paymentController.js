@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import Payment from '../../models/product/paymentmodel.js';
@@ -9,9 +12,15 @@ import Variant from '../../models/product/sizeVariantModel.js';
 import Address from '../../models/userAddressModel.js';
 import { HttpStatus } from '../../utils/httpStatus.js';
 
+const cleanKeyId = process.env.RAZORPAY_KEY_ID?.trim();
+const cleanKeySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
+
+console.log("RAZORPAY_KEY_ID:", cleanKeyId);
+console.log("RAZORPAY_KEY_SECRET:", cleanKeySecret ? "exists (masked)" : "missing");
+
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
+  key_id: cleanKeyId,
+  key_secret: cleanKeySecret
 });
 
 const generateOrderId = () => {
@@ -179,9 +188,10 @@ export const createPaymentOrder = asyncHandler(async (req, res) => {
     });
 
   } catch (error) {
+    console.error("Error in createPaymentOrder:", error);
     res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: error.message
+      message: error.message || 'Internal Server Error'
     });
   }
 });
@@ -207,7 +217,7 @@ export const verifyPayment = asyncHandler(async (req, res) => {
 
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSign = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .createHmac("sha256", cleanKeySecret)
       .update(sign.toString())
       .digest("hex");
 
@@ -324,46 +334,121 @@ export const cancelPayment = asyncHandler(async (req, res) => {
 });
 
 export const handlePaymentFailure = asyncHandler(async (req, res) => {
+  const session = await mongoose.startSession();
   try {
-    const { orderId, paymentId, error } = req.body;
+    const { tempOrderId, razorpayOrderId, paymentId, error } = req.body;
 
-    if (!orderId) {
-      throw new Error('Order ID is required');
+    if (!tempOrderId) {
+      throw new Error('tempOrderId is required');
     }
 
-    const updatedOrder = await Order.findOneAndUpdate(
-      { orderId: orderId },
-      { 
-        'payment.status': 'failed',
-        'payment.transactionId': paymentId || 'FAILED',
-        orderStatus: 'Cancelled'
+    // Find the temporary payment record that was created at create-order time
+    const tempPayment = await Payment.findById(tempOrderId);
+    if (!tempPayment || !tempPayment.tempOrderData) {
+      throw new Error('Temporary payment record not found');
+    }
+
+    await session.startTransaction();
+
+    const { userId, addressId, paymentMethod, amount, couponCode, discountAmount } = tempPayment.tempOrderData;
+
+    // Fetch cart to build order items
+    const cart = await Cart.findOne({ user: userId })
+      .populate({
+        path: 'items.variant',
+        populate: { path: 'product', select: 'name isBlocked' }
+      })
+      .session(session);
+
+    if (!cart || cart.items.length === 0) {
+      throw new Error('Cart is empty or already cleared');
+    }
+
+    // Fetch address
+    const address = await Address.findById(addressId);
+    if (!address) throw new Error('Address not found');
+
+    const orderItems = [];
+    let subtotal = 0;
+
+    for (const item of cart.items) {
+      const variant = await Variant.findById(item.variant._id).session(session);
+      if (!variant) continue;
+      const itemTotal = item.quantity * variant.price;
+      subtotal += itemTotal;
+      orderItems.push({
+        product: item.variant.product._id,
+        sizeVariant: item.variant._id,
+        quantity: item.quantity,
+        price: variant.price,
+        finalPrice: itemTotal,
+        status: 'Cancelled'
+      });
+    }
+
+    const shippingCost = subtotal > 500 ? 0 : 50;
+    const orderId = generateOrderId();
+
+    // Create order with 'Payment Failed' status — visible in order history
+    const order = await Order.create([{
+      user: userId,
+      cart: cart._id,
+      items: orderItems,
+      shipping: {
+        address: {
+          fullName: address.fullName,
+          phone: address.phone,
+          street: address.street,
+          city: address.city,
+          state: address.state,
+          country: address.country || 'India',
+          postalCode: address.postalCode
+        },
+        shippingMethod: 'Standard',
+        deliveryCharge: shippingCost
       },
-      { new: true }
+      payment: {
+        method: paymentMethod,
+        status: 'failed',
+        transactionId: paymentId || razorpayOrderId || `FAILED-${Date.now()}`,
+        amount: amount
+      },
+      totalAmount: amount,
+      couponCode: couponCode || null,
+      discountAmount: discountAmount || 0,
+      orderId,
+      orderStatus: 'Payment Failed',
+      reason: error ? JSON.stringify(error) : 'Payment failed or cancelled by user'
+    }], { session });
+
+    // Update the temp Payment record to reflect failure
+    await Payment.findByIdAndUpdate(
+      tempOrderId,
+      {
+        status: 'failed',
+        orderId: order[0].orderId,
+        paymentId: paymentId || 'FAILED',
+        error: error ? JSON.stringify(error) : 'Payment failed'
+      },
+      { session }
     );
 
-    if (!updatedOrder) {
-      throw new Error('Order not found');
-    }
-
-    await Payment.create({
-      userId: req.user._id,
-      orderId,
-      paymentId: paymentId || 'FAILED',
-      status: 'failed',
-      amount: updatedOrder.totalAmount,
-      checkoutId: updatedOrder._id,
-      error: error ? JSON.stringify(error) : 'Payment failed'
-    });
+    await session.commitTransaction();
 
     res.status(HttpStatus.OK).json({
       success: true,
-      message: "Payment failure recorded successfully"
+      message: 'Payment failure recorded successfully',
+      orderId: order[0].orderId
     });
 
   } catch (error) {
+    await session.abortTransaction();
+    console.error('Error in handlePaymentFailure:', error);
     res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: error.message
     });
+  } finally {
+    await session.endSession();
   }
-}); 
+});

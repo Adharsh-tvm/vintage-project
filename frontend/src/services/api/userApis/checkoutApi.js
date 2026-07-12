@@ -15,5 +15,6 @@ export const verifyResponseApi = async (data) => {
     window.dispatchEvent(new Event('cartUpdated'));
     return res;
 };
+export const recordFailedPaymentApi = (data) => API.post('/payments/failed', data);
 export const applyCouponApi = (data) => API.post('/user/coupons/apply', data)
 export const calculateCouponApi = (data) => API.post('/user/coupons/calculate-price', data)

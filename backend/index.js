@@ -46,6 +46,7 @@ const allowedOrigins = [
   'https://vintage-frontend.vercel.app',
   'https://vintage-fronte-git-cea20b-adharshkattaikonam-gmailcoms-projects.vercel.app',
   'https://vintage-frontend-7jraums5i.vercel.app',
+  'https://vintage.adharshs.in',
 ];
 
 app.use(cors({

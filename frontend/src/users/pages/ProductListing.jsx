@@ -1,7 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Layout } from '../layout/Layout';
-import { Card } from '../../ui/Card';
-import { Button } from '../../ui/Button';
 import {
   ShoppingCart, Star, ChevronLeft, ChevronRight, Search, X,
   StarHalf, Menu, SlidersHorizontal, ChevronDown, ChevronUp, Package,

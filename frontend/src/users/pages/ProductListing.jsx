@@ -8,13 +8,7 @@ import {
 import { cn } from '../../lib/util';
 import { Input } from '../../ui/Input';
 import { Checkbox } from '../../ui/Checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../ui/Select';
+
 import { useSearchParams, useNavigate } from 'react-router';
 import { Categories } from '../layout/Categories';
 import { Slider } from "../../ui/Slider";
@@ -27,17 +21,9 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '../../ui/pagination';
-import { toast } from '../../hooks/useToast';
-import { useDispatch } from 'react-redux';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "../../ui/dialog";
+
 import { debounce } from 'lodash';
-import { globalSearchApi, productsListfetchBrands, productsListfetchCategories, productsListfetchProducts, productsListHandleSearch } from '../../services/api/userApis/userProductApi';
+import { globalSearchApi, productsListfetchBrands, productsListfetchCategories, productsListfetchProducts } from '../../services/api/userApis/userProductApi';
 
 const DEFAULT_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '4XL'];
 
@@ -90,7 +76,6 @@ const ProductListing = () => {
   // Search states
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
-  const dispatch = useDispatch();
 
   const [search, setSearch] = useState("");
   const [searchedProducts, setSearchedProducts] = useState([]);
@@ -99,15 +84,6 @@ const ProductListing = () => {
   const [showSearchBar, setShowSearchBar] = useState(false);
   const searchInputRef = useRef(null);
 
-  const handleSearch = async () => {
-    if (!search) return;
-    try {
-      const { data } = await productsListHandleSearch(search);
-      setSearchedProducts(data.products);
-    } catch (error) {
-      console.error("Error fetching search results:", error);
-    }
-  };
 
   useEffect(() => {
     const searchFromUrl = searchParams.get('search');

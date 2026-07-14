@@ -13,8 +13,6 @@ export function Layout({ children }) {
     useEffect(() => {
         // Check for admin authentication from multiple sources
         const adminInfo = localStorage.getItem('adminInfo');
-        const jwt = localStorage.getItem('jwt');
-        
         if (!adminData && !adminInfo) {
             // No admin in Redux state or localStorage
             navigate('/admin/signin');

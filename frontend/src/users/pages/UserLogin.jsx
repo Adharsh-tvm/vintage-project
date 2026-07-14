@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../../ui/Button';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ArrowRight, Mail, Lock, EyeOff, Eye, ShieldCheck, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { loginUser } from '../../redux/api/userApi';

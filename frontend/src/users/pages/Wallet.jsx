@@ -5,7 +5,6 @@ import { ShoppingBag, Person, AccountBalance, History, NavigateBefore, NavigateN
 import { toast } from 'sonner';
 import { Layout } from '../layout/Layout';
 import { fetchWalletDetailsApi } from '../../services/api/userApis/profileApi';
-import { motion } from 'framer-motion';
 
 function Wallet() {
   const [wallet, setWallet] = useState({ balance: 0 });

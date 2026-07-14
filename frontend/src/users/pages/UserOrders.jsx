@@ -37,7 +37,7 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink, Paginati
 import { debounce } from 'lodash';
 import { useSearchParams } from 'react-router-dom';
 import { userCancelOrderApi, userfetchOrdersApi, userReturnOrderApi } from '../../services/api/userApis/userOrderApi';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 
 export default function Orders() {
   const [orders, setOrders] = useState([]);

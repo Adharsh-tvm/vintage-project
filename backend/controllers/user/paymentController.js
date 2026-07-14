@@ -3,7 +3,7 @@ dotenv.config();
 
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
-import Payment from '../../models/product/paymentmodel.js';
+import Payment from '../../models/product/paymentModel.js';
 import Order from '../../models/product/orderModel.js';
 import asyncHandler from 'express-async-handler';
 import mongoose from 'mongoose';

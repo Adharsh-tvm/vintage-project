@@ -10,7 +10,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger
-} from '../../ui/DropdownMenu';
+} from '../../ui/DropDownMenu';
 import { Button } from '../../ui/Button';
 import { cartCountApi } from '../../services/api/userApis/cartApi';
 import { wishlistCountApi } from '../../services/api/userApis/wishlistApi';

@@ -1,14 +1,14 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Layout } from '../layout/Layout';
-import { Card } from '../../ui/card';
-import { Button } from '../../ui/button';
+import { Card } from '../../ui/Card';
+import { Button } from '../../ui/Button';
 import {
   ShoppingCart, Star, ChevronLeft, ChevronRight, Search, X,
   StarHalf, Menu, SlidersHorizontal, ChevronDown, ChevronUp, Package,
   Tag, ArrowUpDown, Filter
 } from 'lucide-react';
 import { cn } from '../../lib/util';
-import { Input } from '../../ui/input';
+import { Input } from '../../ui/Input';
 import { Checkbox } from '../../ui/Checkbox';
 import {
   Select,
@@ -16,10 +16,10 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../ui/select';
+} from '../../ui/Select';
 import { useSearchParams, useNavigate } from 'react-router';
 import { Categories } from '../layout/Categories';
-import { Slider } from "../../ui/slider";
+import { Slider } from "../../ui/Slider";
 import {
   Pagination,
   PaginationContent,

@@ -9,6 +9,7 @@ import { setUserInfo } from '../../redux/slices/authSlice';
 import { useGoogleLogin } from '@react-oauth/google';
 import { checkEmailApi, resetPasswordApi, responseGoogleApi, sendOtpApi, verifyOtpApi } from '../../services/api/userApis/userAuthApi';
 import { useUserAuthNavigation } from '../../hooks/useAuthNavigation';
+import { setAuthToken } from '../../services/api/api';
 
 export default function SignIn() {
   const dispatch = useDispatch();
@@ -39,6 +40,7 @@ export default function SignIn() {
           localStorage.setItem('token', result.data.token);
           localStorage.setItem('jwt', result.data.token);
           localStorage.setItem('userInfo', JSON.stringify(result.data.user));
+          setAuthToken(result.data.token); // immediately update axios header
           dispatch(setUserInfo(result.data.user));
 
           toast.success('Successfully signed in with Google!');
@@ -71,6 +73,7 @@ export default function SignIn() {
         localStorage.setItem('userInfo', JSON.stringify(data));
         if (data.token) {
           localStorage.setItem('jwt', data.token);
+          setAuthToken(data.token); // immediately update axios header
         }
 
         toast.success('Successfully signed in!');

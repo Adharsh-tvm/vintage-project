@@ -1,23 +1,19 @@
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://vintage.adharshs.in/api";
-console.log(API_BASE_URL)
-// Public API (No Authorization Header)
+
+// Public API instance — withCredentials sends the httpOnly token cookie on every request
 export const API = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
 });
 
 // Request interceptor
 API.interceptors.request.use(
   (config) => {
-    // Do something before request is sent
-    console.log("config", config);
-
     return config;
-
   },
   (error) => {
-    // Do something with request error
     return Promise.reject(error);
   }
 );

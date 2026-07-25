@@ -54,55 +54,12 @@ export default function Dashboard() {
     const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page')) || 1);
     const [totalPages, setTotalPages] = useState(1);
     const [itemsPerPage] = useState(5);
-    const [isDownloading, setIsDownloading] = useState(false);
-    const [topProducts, setTopProducts] = useState([]);
-    const [topCategories, setTopCategories] = useState([]);
-    const [topBrands, setTopBrands] = useState([]);
-
-    const fetchSalesData = async () => {
-        try {
-            setLoading(true);
-
-            const params = {
-                range: dateRange,
-                page: currentPage,
-                limit: itemsPerPage
-            };
-
-            if (dateRange === 'custom') {
-                params.startDate = customStartDate.toISOString();
-                params.endDate = customEndDate.toISOString();
-            }
-
-            setSearchParams(params);
-
-            const response = await fetchSalesDataApi(params);
-            if (response.data) {
-                const { stats, salesData, transactions, pagination, topProducts, topCategories, topBrands } = response.data;
-                setStats(stats);
-                setSalesData(salesData);
-                setTransactions(transactions);
-                setTotalPages(pagination.totalPages);
-                setCurrentPage(pagination.currentPage);
-                setTopProducts(topProducts || []);
-                setTopCategories(topCategories || []);
-                setTopBrands(topBrands || []);
-            }
-        } catch (error) {
-            console.error('Error details:', error.response || error);
-            toast.error(error.response?.data?.message || 'Failed to fetch sales data');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchSalesData();
-    }, [currentPage, dateRange, customStartDate, customEndDate, itemsPerPage]);
+    const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+    const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
 
     const handleDownloadPDF = async () => {
         try {
-            setIsDownloading(true);
+            setIsDownloadingPdf(true);
             let params = {
                 range: dateRange,
                 format: 'pdf'
@@ -114,7 +71,6 @@ export default function Dashboard() {
 
             const response = await downloadSalesReportApi(params);
 
-            // Create blob link to download
             const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
             const link = document.createElement('a');
             link.href = url;
@@ -124,21 +80,22 @@ export default function Dashboard() {
             link.remove();
             window.URL.revokeObjectURL(url);
 
-            setTimeout(() => {
-
-                toast.success('Report downloaded successfully');
-            }, 3000)
+            toast.success('PDF sales report downloaded successfully!');
         } catch (error) {
             console.error('Download error:', error);
-            toast.error('Failed to download report');
+            toast.error('Failed to download PDF report');
         } finally {
-            setIsDownloading(false);
+            setIsDownloadingPdf(false);
         }
     };
 
     const handleDownloadExcel = async () => {
         try {
-            let params = { range: dateRange };
+            setIsDownloadingExcel(true);
+            let params = {
+                range: dateRange,
+                format: 'excel'
+            };
             if (dateRange === 'custom') {
                 params.startDate = customStartDate.toISOString();
                 params.endDate = customEndDate.toISOString();
@@ -146,20 +103,25 @@ export default function Dashboard() {
 
             const response = await downloadSalesReportApi(params);
 
-            // Create blob link to download
-            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const url = window.URL.createObjectURL(
+                new Blob([response.data], {
+                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                })
+            );
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `sales-report-${new Date().toISOString().split('T')[0]}.pdf`);
+            link.setAttribute('download', `sales-report-${dateRange}-${new Date().toISOString().split('T')[0]}.xlsx`);
             document.body.appendChild(link);
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
 
-            toast.success('Report downloaded successfully');
+            toast.success('Excel sales report downloaded successfully!');
         } catch (error) {
             console.error('Download error:', error);
-            toast.error('Failed to download report');
+            toast.error('Failed to download Excel report');
+        } finally {
+            setIsDownloadingExcel(false);
         }
     };
 
@@ -204,15 +166,16 @@ export default function Dashboard() {
                     <Button
                         variant="outline"
                         onClick={handleDownloadPDF}
-                        disabled={isDownloading}
+                        disabled={isDownloadingPdf}
                     >
-                        {isDownloading ? 'Downloading...' : 'Download PDF'}
+                        {isDownloadingPdf ? 'Downloading...' : 'Download PDF'}
                     </Button>
                     <Button
                         variant="outline"
                         onClick={handleDownloadExcel}
+                        disabled={isDownloadingExcel}
                     >
-                        Download Excel
+                        {isDownloadingExcel ? 'Downloading...' : 'Download Excel'}
                     </Button>
                 </div>
             </div>

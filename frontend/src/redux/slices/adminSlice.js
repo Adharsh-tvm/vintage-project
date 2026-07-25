@@ -2,7 +2,7 @@ import { createSlice } from "@reduxjs/toolkit";
 
 const initialState = {
     data: localStorage.getItem('adminInfo') ? JSON.parse(localStorage.getItem('adminInfo')) : null,
-    isAuthenticated: localStorage.getItem('userInfo') ? true : false,
+    isAuthenticated: localStorage.getItem('adminInfo') ? true : false,
 };
 
 const adminSlice = createSlice({
@@ -17,7 +17,7 @@ const adminSlice = createSlice({
             state.data = null;
             state.isAuthenticated = false;
             // Clear localStorage
-            localStorage.removeItem('userInfo');
+            localStorage.removeItem('adminInfo');
             localStorage.removeItem('jwt');
         },
     },

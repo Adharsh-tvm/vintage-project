@@ -1,5 +1,5 @@
 import express from "express";
-import { authenticate, authorizeAdmin } from '../../middlewares/authMiddleware.js'
+import { authorizeAdmin } from '../../middlewares/authMiddleware.js'
 import {
   loginAdmin,
   logoutCurrentAdmin,
@@ -17,20 +17,20 @@ const router = express.Router();
 
 router.post("/login", loginAdmin);
 router.post("/logout",  logoutCurrentAdmin);
-router.get("/dashboard", authenticate, authorizeAdmin, getDashboard);
+router.get("/dashboard", authorizeAdmin, getDashboard);
 
-router.get("/users", authenticate, authorizeAdmin, getAllUsers);
+router.get("/users", authorizeAdmin, getAllUsers);
 
 router
   .route("/users/:id")
-  .delete(authenticate, authorizeAdmin, deleteUserById)
-  .get(authenticate, authorizeAdmin, getUserById)
-  .put(authenticate, authorizeAdmin, updateUserById);
+  .delete(authorizeAdmin, deleteUserById)
+  .get(authorizeAdmin, getUserById)
+  .put(authorizeAdmin, updateUserById);
 
 
-router.put("/users/:id/status", authenticate, authorizeAdmin, updateUserStatus);
+router.put("/users/:id/status", authorizeAdmin, updateUserStatus);
 
-router.get('/sales-report', authenticate, authorizeAdmin, getSalesReport);
-router.get('/sales-report/download', authenticate, authorizeAdmin, downloadSalesReport);
+router.get('/sales-report', authorizeAdmin, getSalesReport);
+router.get('/sales-report/download', authorizeAdmin, downloadSalesReport);
 
 export default router;

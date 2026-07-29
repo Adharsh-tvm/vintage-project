@@ -20,7 +20,7 @@ export const getAllOrders = async (req, res) => {
     if (search) {
       filterQuery.$or = [
         { orderId: { $regex: search, $options: 'i' } },
-        { 'user.fullname': { $regex: search, $options: 'i' } }
+        { 'shipping.address.fullName': { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -38,10 +38,15 @@ export const getAllOrders = async (req, res) => {
 
     // Fetch orders with filters, sorting and pagination
     const orders = await Order.find(filterQuery)
-      .populate('user', 'fullname email')
+      .populate('user', 'firstname lastname name fullName email')
       .sort(sortObj)
       .skip((page - 1) * limit)
       .limit(limit);
+
+    console.log("=== ADMIN GET ALL ORDERS LOG ===");
+    orders.forEach(o => {
+      console.log(`OrderId: ${o.orderId}, User:`, o.user, "ShippingAddress:", o.shipping?.address);
+    });
 
     res.json({
       orders,
@@ -162,7 +167,7 @@ export const getReturnRequests = async (req, res) => {
     if (search) {
       filterQuery.$or = [
         { orderId: { $regex: search, $options: 'i' } },
-        { 'user.fullname': { $regex: search, $options: 'i' } },
+        { 'shipping.address.fullName': { $regex: search, $options: 'i' } },
         { 'items.product.name': { $regex: search, $options: 'i' } }
       ];
     }
@@ -180,7 +185,7 @@ export const getReturnRequests = async (req, res) => {
 
     // Fetch returns with filters and pagination
     const returns = await Order.find(filterQuery)
-      .populate('user', 'fullname email')
+      .populate('user', 'firstname lastname email')
       .populate({
         path: 'items.product',
         select: 'name images'

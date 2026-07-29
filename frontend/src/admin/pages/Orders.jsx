@@ -84,7 +84,6 @@ function Orders() {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     fetchOrders();
   }, [searchParams]); // Fetch when URL params change
@@ -224,7 +223,20 @@ function Orders() {
                           <TableCell>
                             {new Date(order.createdAt).toLocaleDateString()}
                           </TableCell>
-                          <TableCell>{order.user?.fullname || 'N/A'}</TableCell>
+                          <TableCell>
+                            {(() => {
+                              const u = order.user;
+                              const nameFromUser = u ? (u.firstname ? `${u.firstname} ${u.lastname || ''}`.trim() : (u.name || u.fullName || '')) : '';
+                              const nameFromShipping = order.shipping?.address?.fullName || '';
+                              const finalCustomerName = nameFromUser || nameFromShipping || 'N/A';
+                              console.log(`[Orders Page] Order #${order.orderId}:`, {
+                                user: order.user,
+                                shippingAddress: order.shipping?.address,
+                                resolvedName: finalCustomerName
+                              });
+                              return finalCustomerName;
+                            })()}
+                          </TableCell>
                           <TableCell>₹{order.totalAmount?.toFixed(2)}</TableCell>
                           <TableCell>
                             <span className={`px-2 py-1 rounded-full text-xs ${
@@ -266,7 +278,15 @@ function Orders() {
                                 <h4 className="font-semibold mb-2">Order Details</h4>
                                 <div className="grid grid-cols-2 gap-4">
                                   <div>
-                                    <p className="text-sm text-gray-600">Customer Email:</p>
+                                    <p className="text-sm text-gray-600">Customer Name:</p>
+                                    <p className="font-medium">
+                                      {(() => {
+                                        const u = order.user;
+                                        const nameFromUser = u ? (u.firstname ? `${u.firstname} ${u.lastname || ''}`.trim() : (u.name || u.fullName || '')) : '';
+                                        return nameFromUser || order.shipping?.address?.fullName || 'N/A';
+                                      })()}
+                                    </p>
+                                    <p className="text-sm text-gray-600 mt-2">Customer Email:</p>
                                     <p className="font-medium">{order.user?.email || 'N/A'}</p>
                                   </div>
                                   <div>

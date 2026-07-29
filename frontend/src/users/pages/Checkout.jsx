@@ -21,6 +21,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/Select';
 import { setCartItems } from '../../redux/slices/cartSlice';
 import { applyCouponApi, calculateCouponApi, checkoutAddressApi, fetchCheckoutAddressApi, fetchCheckoutCouponsApi, fetchCheckoutWalletBalanceApi, orderResponseApi, paymentResponseApi, verifyResponseApi } from '../../services/api/userApis/checkoutApi';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../ui/AlertDialog';
 
 
 
@@ -155,6 +165,8 @@ function Checkout() {
   const [selectedCoupon, setSelectedCoupon] = useState(null);
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [walletBalance, setWalletBalance] = useState(0);
+  const [showWalletConfirmModal, setShowWalletConfirmModal] = useState(false);
+  const [isPlacingWalletOrder, setIsPlacingWalletOrder] = useState(false);
 
   useEffect(() => {
     // If cart is empty but exists in localStorage, load it
@@ -210,13 +222,26 @@ function Checkout() {
       return;
     }
 
+    const finalAmount = total - couponDiscount;
+
+    if (selectedPaymentMethod === 'wallet') {
+      if (walletBalance < finalAmount) {
+        toast.error('Insufficient wallet balance');
+        return;
+      }
+      setShowWalletConfirmModal(true);
+      return;
+    }
+
+    await executeOrderPlacement();
+  };
+
+  const executeOrderPlacement = async () => {
     try {
       const finalAmount = total - couponDiscount;
 
-      // Check wallet balance if wallet payment selected
-      if (selectedPaymentMethod === 'wallet' && walletBalance < finalAmount) {
-        toast.error('Insufficient wallet balance');
-        return;
+      if (selectedPaymentMethod === 'wallet') {
+        setIsPlacingWalletOrder(true);
       }
 
       // For COD and Wallet payments
@@ -230,6 +255,7 @@ function Checkout() {
 
         const orderResponse = await orderResponseApi(orderData);
 
+        setShowWalletConfirmModal(false);
         toast.success('Order placed successfully!');
         navigate(`/success/${orderResponse.data.orderId}`);
       } 
@@ -317,6 +343,8 @@ function Checkout() {
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to place order');
+    } finally {
+      setIsPlacingWalletOrder(false);
     }
   };
 
@@ -660,6 +688,48 @@ function Checkout() {
           </div>
         </div>
       </div>
+
+      {/* Wallet Payment Confirmation Modal */}
+      <AlertDialog open={showWalletConfirmModal} onOpenChange={setShowWalletConfirmModal}>
+        <AlertDialogContent className="max-w-md bg-white p-6 rounded-lg shadow-xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl font-bold text-gray-900">Confirm Wallet Payment</AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-600 space-y-3 pt-2">
+              <span>Are you sure you want to place this order using your wallet balance?</span>
+              <div className="bg-gray-50 p-3.5 rounded-lg space-y-2 text-sm border border-gray-200 mt-2">
+                <div className="flex justify-between text-gray-700">
+                  <span>Order Total:</span>
+                  <span className="font-semibold text-gray-900">₹{(total - couponDiscount).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-gray-700">
+                  <span>Current Wallet Balance:</span>
+                  <span className="font-semibold text-blue-600">₹{walletBalance.toFixed(2)}</span>
+                </div>
+                <Separator className="my-1" />
+                <div className="flex justify-between text-sm font-bold pt-1">
+                  <span>Balance After Purchase:</span>
+                  <span className="text-green-600">₹{(walletBalance - (total - couponDiscount)).toFixed(2)}</span>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 flex gap-2 justify-end">
+            <AlertDialogCancel disabled={isPlacingWalletOrder} onClick={() => setShowWalletConfirmModal(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                executeOrderPlacement();
+              }}
+              disabled={isPlacingWalletOrder}
+              className="bg-black hover:bg-gray-800 text-white font-medium px-4 py-2 rounded-md transition-colors"
+            >
+              {isPlacingWalletOrder ? 'Processing...' : 'Confirm & Pay'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 }

@@ -42,6 +42,11 @@ const orderSchema = new mongoose.Schema(
                         return this.price;
                     }
                 },
+                couponDiscount: {
+                    type: Number,
+                    default: 0,
+                    min: 0,
+                },
                 finalPrice: {
                     type: Number,
                     required: true,
@@ -88,6 +93,21 @@ const orderSchema = new mongoose.Schema(
                 },
                 rejectionReason: {
                     type: String,
+                },
+                cancelledQuantity: {
+                    type: Number,
+                    default: 0,
+                    min: 0,
+                },
+                returnQuantity: {
+                    type: Number,
+                    default: 0,
+                    min: 0,
+                },
+                returnedQuantity: {
+                    type: Number,
+                    default: 0,
+                    min: 0,
                 },
             },
         ],
@@ -166,6 +186,9 @@ const orderSchema = new mongoose.Schema(
         },
         reason: {
             type: String,
+        },
+        subtotal: {
+            type: Number,
         },
         totalAmount: {
             type: Number,

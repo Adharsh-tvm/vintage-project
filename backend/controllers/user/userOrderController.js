@@ -112,15 +112,13 @@ export const createOrder = asyncHandler(async (req, res) => {
                 sizeVariant: item.variant._id,
                 quantity: item.quantity,
                 price: variant.price, // Original price
-                discountPrice: variant.discountPrice || variant.price, // Store discount price
-                finalPrice: itemTotal,
+                discountPrice: itemPrice, // Store offer/discount price
                 status: 'pending'
             });
         }
 
         // 4. Calculate totals
         const shippingCost = subtotal > 500 ? 0 : 50;
-        const total = subtotal + shippingCost;
 
         let couponDiscount = 0;
         let appliedCoupon = null;
@@ -142,6 +140,7 @@ export const createOrder = asyncHandler(async (req, res) => {
                 } else {
                     couponDiscount = appliedCoupon.discountValue;
                 }
+                couponDiscount = parseFloat(couponDiscount.toFixed(2));
             }
         }
 
@@ -149,16 +148,31 @@ export const createOrder = asyncHandler(async (req, res) => {
         const finalSubtotal = subtotal - couponDiscount;
         const finalTotal = finalSubtotal + shippingCost;
 
-        // Create order items with discount information
-        const orderItemsWithDiscount = orderItems.map(item => ({
-            product: item.product,
-            sizeVariant: item.sizeVariant,
-            quantity: item.quantity,
-            price: item.price,
-            discountPrice: item.discountPrice,
-            finalPrice: item.finalPrice,
-            status: 'pending'
-        }));
+        // Distribute coupon discount proportionally across items
+        let accumulatedCouponDiscount = 0;
+        const orderItemsWithDiscount = orderItems.map((item, index) => {
+            const itemSubtotal = item.discountPrice * item.quantity;
+            let itemCouponDiscount = 0;
+            if (couponDiscount > 0 && subtotal > 0) {
+                if (index === orderItems.length - 1) {
+                    itemCouponDiscount = parseFloat((couponDiscount - accumulatedCouponDiscount).toFixed(2));
+                } else {
+                    itemCouponDiscount = parseFloat(((itemSubtotal / subtotal) * couponDiscount).toFixed(2));
+                    accumulatedCouponDiscount += itemCouponDiscount;
+                }
+            }
+            const itemFinalPrice = parseFloat(Math.max(0, itemSubtotal - itemCouponDiscount).toFixed(2));
+            return {
+                product: item.product,
+                sizeVariant: item.sizeVariant,
+                quantity: item.quantity,
+                price: item.price,
+                discountPrice: item.discountPrice,
+                couponDiscount: itemCouponDiscount,
+                finalPrice: itemFinalPrice,
+                status: 'pending'
+            };
+        });
 
         // Set payment status based on payment method
         const paymentStatus = {
@@ -193,7 +207,7 @@ export const createOrder = asyncHandler(async (req, res) => {
             },
             shippingAddress: addressId,
             paymentMethod,
-            subtotal: finalSubtotal,
+            subtotal: subtotal,
             shippingCost,
             total: finalTotal,
             totalAmount: finalTotal,
@@ -202,9 +216,8 @@ export const createOrder = asyncHandler(async (req, res) => {
             discountAmount: couponDiscount,
             totalDiscount: orderItemsWithDiscount.reduce((acc, item) => {
                 const itemOriginalTotal = item.price * item.quantity;
-                const itemFinalTotal = item.finalPrice * item.quantity;
-                return acc + (itemOriginalTotal - itemFinalTotal);
-            }, 0) + couponDiscount
+                return acc + (itemOriginalTotal - item.finalPrice);
+            }, 0)
         });
 
         // Save the order first
@@ -439,26 +452,164 @@ export const cancelOrder = async (req, res) => {
   }
 };
 
-// Return order
-export const returnOrder = asyncHandler(async (req, res) => {
-    const { reason, additionalDetails } = req.body;
+// Cancel individual order item (supports partial quantity)
+export const cancelOrderItem = async (req, res) => {
+  const session = await mongoose.startSession();
+  try {
+    await session.startTransaction();
+
     const { id: orderId, itemId } = req.params;
-    
+    const { reason, quantity } = req.body;
+    const userId = req.user._id;
+
+    if (!reason || !reason.trim()) {
+      return res.status(HttpStatus.BAD_REQUEST).json({
+        message: 'Please provide a reason for cancellation',
+      });
+    }
+
+    const cancelQty = parseInt(quantity, 10);
+    if (!cancelQty || cancelQty < 1) {
+      return res.status(HttpStatus.BAD_REQUEST).json({
+        message: 'Please provide a valid quantity to cancel (minimum 1)',
+      });
+    }
+
+    const order = await Order.findOne({ orderId, user: userId })
+      .populate('items.sizeVariant')
+      .session(session);
+
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    const item = order.items.find((i) => i._id.toString() === itemId);
+    if (!item) {
+      return res.status(404).json({ message: 'Order item not found' });
+    }
+
+    // Validate item can be cancelled
+    const cancellableStatuses = ['pending', 'Processing'];
+    if (!cancellableStatuses.includes(item.status)) {
+      return res.status(HttpStatus.BAD_REQUEST).json({
+        message: `Item cannot be cancelled — current status is "${item.status}"`,
+      });
+    }
+
+    // How many units are still cancellable
+    const alreadyCancelled = item.cancelledQuantity || 0;
+    const remainingCancellable = item.quantity - alreadyCancelled;
+
+    if (cancelQty > remainingCancellable) {
+      return res.status(HttpStatus.BAD_REQUEST).json({
+        message: `Cannot cancel ${cancelQty} units — only ${remainingCancellable} unit(s) are available to cancel`,
+      });
+    }
+
+    // Restore stock for ONLY the cancelled quantity
+    await Variant.findByIdAndUpdate(
+      item.sizeVariant._id,
+      { $inc: { stock: cancelQty } },
+      { session }
+    );
+
+    // ── Correct Refund Calculation ────────────────────────────────────────────
+    // item.finalPrice  = total for this item after product discount (all units)
+    // item.quantity    = originally ordered quantity
+    // unitNetPrice     = per-unit price after product discount
+    // grossRefund      = cancelQty × unitNetPrice
+    // couponShare      = grossRefund's proportional share of the coupon discount
+    // netRefund        = grossRefund − couponShare
+    // ─────────────────────────────────────────────────────────────────────────
+    const isPaidOrder =
+      (order.payment.method === 'online' || order.payment.method === 'wallet') &&
+      order.payment.status === 'completed';
+
+    if (isPaidOrder) {
+      const unitNetPrice = item.finalPrice / item.quantity;
+      const netRefund = parseFloat(Math.max(0, unitNetPrice * cancelQty).toFixed(2));
+
+      let wallet = await Wallet.findOne({ userId }).session(session);
+      if (!wallet) {
+        wallet = await Wallet.create([{ userId, balance: 0, transactions: [] }], { session });
+        wallet = wallet[0];
+      }
+
+      wallet.balance += netRefund;
+      wallet.transactions.push({
+        userId,
+        type: 'credit',
+        amount: netRefund,
+        description: `Refund for ${cancelQty} cancelled unit(s) of "${item.product?.name || 'item'}" from order #${order.orderId}`,
+        date: new Date(),
+      });
+      await wallet.save({ session });
+    }
+
+    // Update item tracking
+    item.cancelledQuantity = alreadyCancelled + cancelQty;
+    item.cancellationReason = reason.trim();
+
+    // Mark item as fully cancelled only when all units are cancelled
+    if (item.cancelledQuantity >= item.quantity) {
+      item.status = 'Cancelled';
+    }
+
+    // Cancel whole order only when ALL items are fully cancelled
+    const allCancelled = order.items.every(
+      (i) => (i.cancelledQuantity || 0) >= i.quantity
+    );
+    if (allCancelled) {
+      order.orderStatus = 'Cancelled';
+      order.reason = reason.trim();
+    }
+
+    await order.save({ session });
+    await session.commitTransaction();
+
+    res.json({
+      success: true,
+      message: `${cancelQty} unit(s) cancelled successfully`,
+      order,
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error('Cancel order item error:', error);
+    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+      message: 'Error cancelling item',
+      error: error.message,
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+// Return order (supports partial quantity)
+export const returnOrder = asyncHandler(async (req, res) => {
+    const { reason, additionalDetails, quantity } = req.body;
+    const { id: orderId, itemId } = req.params;
+
+    const returnQty = parseInt(quantity, 10);
+    if (!returnQty || returnQty < 1) {
+        res.status(HttpStatus.BAD_REQUEST);
+        throw new Error('Please provide a valid quantity to return (minimum 1)');
+    }
+
     const order = await Order.findOne({
         orderId: orderId,
         user: req.user._id
     });
 
     if (!order) {
-        res.status(HttpStatus.NOT_FOUNDyy);
+        res.status(404);
         throw new Error('Order not found');
     }
 
     // Find the specific item
     const item = order.items.find(item => item._id.toString() === itemId);
-    
+
     if (!item) {
-        res.status(HttpStatus.NOT_FOUNDyy);
+        res.status(404);
         throw new Error('Order item not found');
     }
 
@@ -468,10 +619,15 @@ export const returnOrder = asyncHandler(async (req, res) => {
         throw new Error('Order must be delivered before requesting return');
     }
 
-    // Check if return is already requested for this item
-    if (item.returnRequested) {
+    // How many units are eligible for return (excluding already cancelled, already returned, and pending return)
+    const alreadyCancelled = item.cancelledQuantity || 0;
+    const alreadyReturned = item.returnedQuantity || 0;
+    const pendingReturn = (item.returnRequested && item.returnStatus === 'Return Pending') ? (item.returnQuantity || 0) : 0;
+    const maxReturnable = item.quantity - alreadyCancelled - alreadyReturned - pendingReturn;
+
+    if (returnQty > maxReturnable) {
         res.status(HttpStatus.BAD_REQUEST);
-        throw new Error('Return already requested for this item');
+        throw new Error(`Cannot return ${returnQty} units — only ${maxReturnable} unit(s) are eligible for return`);
     }
 
     // Update specific item status
@@ -479,12 +635,13 @@ export const returnOrder = asyncHandler(async (req, res) => {
     item.returnReason = reason;
     item.additionalDetails = additionalDetails;
     item.returnStatus = 'Return Pending';
+    item.returnQuantity = pendingReturn + returnQty;
 
     await order.save();
 
     res.json({
         success: true,
-        message: 'Return request submitted successfully',
+        message: `Return request for ${returnQty} unit(s) submitted successfully`,
         order
     });
 });
@@ -695,28 +852,14 @@ export const pdfDownloader = asyncHandler(async (req, res) => {
 });
 
 const calculateReturnAmount = (orderItem, order) => {
-  // Get the original item price and quantity
-  const originalItemTotal = orderItem.price * orderItem.quantity;
-  
-  // Calculate product discount
-  const productDiscount = orderItem.price - orderItem.discountPrice;
-  const totalProductDiscount = productDiscount * orderItem.quantity;
-  
-  // Calculate proportional coupon discount if coupon was applied
-  let couponDiscountShare = 0;
-  if (order.couponCode && order.discountAmount > 0) {
-    // Calculate this item's share of the total coupon discount
-    const itemSharePercentage = orderItem.finalPrice / order.subtotal;
-    couponDiscountShare = order.discountAmount * itemSharePercentage;
-  }
-  
-  // Calculate final return amount
-  const returnAmount = originalItemTotal - totalProductDiscount - couponDiscountShare;
-  
+  // How many units are being returned (partial or full)
+  const returnQty = orderItem.returnQuantity || orderItem.quantity;
+  const unitNetPrice = orderItem.finalPrice / orderItem.quantity;
+  const returnAmount = parseFloat(Math.max(0, unitNetPrice * returnQty).toFixed(2));
+
   return {
     returnAmount,
-    productDiscount: totalProductDiscount,
-    couponDiscountShare
+    returnQty,
   };
 };
 
@@ -737,23 +880,35 @@ export const processReturn = async (req, res) => {
       }
       
       // Calculate return amounts
-      const { returnAmount } = calculateReturnAmount(orderItem, order);
+      const { returnAmount, returnQty } = calculateReturnAmount(orderItem, order);
       
       // Process refund to wallet
       const refundSuccess = await processReturnRefund(
         orderId,
         order.user,
         returnAmount,
-        `Refund for returned item from order #${order.orderId}`
+        `Refund for ${returnQty} returned unit(s) from order #${order.orderId}`
       );
 
       if (!refundSuccess) {
         throw new Error('Failed to process refund to wallet');
       }
       
-      // Update item status
-      orderItem.status = 'Returned';
+      // Update item status and tracking
+      const newReturnedQty = (orderItem.returnedQuantity || 0) + returnQty;
+      orderItem.returnedQuantity = newReturnedQty;
+      orderItem.returnQuantity = 0;
       orderItem.returnProcessed = true;
+
+      if (newReturnedQty + (orderItem.cancelledQuantity || 0) >= orderItem.quantity) {
+        orderItem.status = 'Returned';
+        orderItem.returnRequested = true;
+        orderItem.returnStatus = 'Refunded';
+      } else {
+        orderItem.returnRequested = false;
+        orderItem.returnStatus = 'Return Approved';
+      }
+
       await order.save({ session });
       
       res.json({

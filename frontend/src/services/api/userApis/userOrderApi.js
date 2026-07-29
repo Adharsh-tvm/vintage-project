@@ -14,3 +14,6 @@ export const userCancelOrderApi = (orderId, reason) => API.put(`/user/orders/${o
 export const userReturnOrderApi = (orderId, data) => API.post(`/user/orders/${orderId}/return`, data)
 export const userReturnOrderItemApi = (orderId, itemId, data) =>
   API.post(`/user/orders/${orderId}/items/${itemId}/return`, data);
+
+export const userCancelOrderItemApi = (orderId, itemId, reason, quantity) =>
+  API.put(`/user/orders/${orderId}/items/${itemId}/cancel`, { reason, quantity });

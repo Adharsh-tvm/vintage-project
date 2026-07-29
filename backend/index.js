@@ -7,7 +7,7 @@ import morgan from "morgan";
 import helmet from "helmet";
 import http from 'http'
 import { Server } from "socket.io";
-import { initCouponExpirationCheck } from "./utils/cronJobs.js"
+import { initCouponExpirationCheck, initOfferDiscountRecalculation } from "./utils/cronJobs.js"
 
 // Utiles 
 import connectDB from './config/db.js'
@@ -66,6 +66,7 @@ app.use(cors({
   
 
 initCouponExpirationCheck();
+initOfferDiscountRecalculation();
 
 
 app.use((req, res, next) => {

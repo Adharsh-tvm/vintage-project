@@ -237,49 +237,41 @@ export const handleReturnRequest = async (req, res) => {
     const item = order.items[itemIndex];
 
     if (action === 'accept') {
-      // Update the specific item's status
-      order.items[itemIndex].returnStatus = 'Return Approved';
-      order.items[itemIndex].status = 'Returned';
+      const returnQty = item.returnQuantity || (item.quantity - (item.returnedQuantity || 0) - (item.cancelledQuantity || 0));
+
+      const newReturnedQty = (item.returnedQuantity || 0) + returnQty;
+      item.returnedQuantity = newReturnedQty;
+      item.returnQuantity = 0;
+      item.returnProcessed = true;
+
+      const totalUnavailable = newReturnedQty + (item.cancelledQuantity || 0);
+
+      if (totalUnavailable >= item.quantity) {
+        item.status = 'Returned';
+        item.returnRequested = true;
+        item.returnStatus = 'Refunded';
+      } else {
+        item.returnRequested = false;
+        item.returnStatus = 'Return Approved';
+      }
       
       // Update inventory
       await Variant.findByIdAndUpdate(
         item.sizeVariant._id, 
-        { $inc: { stock: item.quantity } },
+        { $inc: { stock: returnQty } },
         { session }
       );
 
-      // Process refund for online payments
+      // Process refund for online/wallet/cod payments
       if (order.payment?.method) {
-        let refundAmount = item.finalPrice;
-        
-        // Check if this is the first return and if there was a coupon applied
-        const hasOtherReturns = order.items.some((i, idx) => 
-          idx !== itemIndex && i.returnStatus === 'Return Approved'
-        );
-        
-        console.log('Coupon Discount:', order.couponDiscount);
-        console.log('Has Other Returns:', hasOtherReturns);
-        console.log('Original Refund Amount:', refundAmount);
-        
-        if (!hasOtherReturns && order.couponDiscount > 0) {
-          // Calculate the proportion of the item's price to the total order amount
-          const itemProportion = item.finalPrice / order.totalAmount;
-          const couponDeduction = order.couponDiscount * itemProportion;
-          
-          console.log('Item Proportion:', itemProportion);
-          console.log('Coupon Deduction:', couponDeduction);
-          
-          // Subtract the proportional coupon discount from the refund amount
-          refundAmount -= couponDeduction;
-          
-          console.log('Final Refund Amount:', refundAmount);
-        }
+        const unitNetPrice = item.finalPrice / item.quantity;
+        const refundAmount = parseFloat(Math.max(0, unitNetPrice * returnQty).toFixed(2));
         
         const refundSuccess = await processReturnRefund(
           order.orderId,
           order.user,
           refundAmount,
-          `Refund for returned item from order #${order.orderId}`,
+          `Refund for ${returnQty} returned unit(s) from order #${order.orderId}`,
           session
         );
 
@@ -287,11 +279,14 @@ export const handleReturnRequest = async (req, res) => {
           throw new Error('Failed to process refund to wallet');
         }
 
-        order.items[itemIndex].returnProcessed = true;
-        order.items[itemIndex].returnStatus = 'Refunded';
+        if (totalUnavailable >= item.quantity) {
+          item.returnStatus = 'Refunded';
+        }
       }
     } else if (action === 'reject') {
-      order.items[itemIndex].returnStatus = 'Return Rejected';
+      item.returnRequested = false;
+      item.returnQuantity = 0;
+      item.returnStatus = 'Return Rejected';
     }
 
     await order.save({ session });

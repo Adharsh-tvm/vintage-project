@@ -79,21 +79,21 @@ const createOrder = async (orderData, session) => {
         { session }
       );
 
-      const itemTotal = item.quantity * variant.price;
-      subtotal += itemTotal;
+      const itemDiscountPrice = variant.discountPrice || variant.price;
+      const itemSubtotal = item.quantity * itemDiscountPrice;
+      subtotal += itemSubtotal;
 
       orderItems.push({
         product: item.variant.product._id,
         sizeVariant: item.variant._id,
         quantity: item.quantity,
         price: variant.price,
-        finalPrice: itemTotal,
+        discountPrice: itemDiscountPrice,
         status: 'pending'
       });
     }
 
     const shippingCost = subtotal > 500 ? 0 : 50;
-    const total = subtotal + shippingCost;
     const orderId = generateOrderId();
 
     // Fetch the complete address first
@@ -102,10 +102,36 @@ const createOrder = async (orderData, session) => {
       throw new Error('Address not found');
     }
 
+    const couponDisc = Number(discountAmount) || 0;
+    let accumulatedCouponDiscount = 0;
+    const finalOrderItems = orderItems.map((item, index) => {
+      const itemSubtotal = item.discountPrice * item.quantity;
+      let itemCouponDiscount = 0;
+      if (couponDisc > 0 && subtotal > 0) {
+        if (index === orderItems.length - 1) {
+          itemCouponDiscount = parseFloat((couponDisc - accumulatedCouponDiscount).toFixed(2));
+        } else {
+          itemCouponDiscount = parseFloat(((itemSubtotal / subtotal) * couponDisc).toFixed(2));
+          accumulatedCouponDiscount += itemCouponDiscount;
+        }
+      }
+      const itemFinalPrice = parseFloat(Math.max(0, itemSubtotal - itemCouponDiscount).toFixed(2));
+      return {
+        product: item.product,
+        sizeVariant: item.sizeVariant,
+        quantity: item.quantity,
+        price: item.price,
+        discountPrice: item.discountPrice,
+        couponDiscount: itemCouponDiscount,
+        finalPrice: itemFinalPrice,
+        status: 'pending'
+      };
+    });
+
     const order = await Order.create([{
       user: userId,
       cart: cart._id,
-      items: orderItems,
+      items: finalOrderItems,
       shipping: {
         address: {
           fullName: address.fullName,
@@ -125,9 +151,10 @@ const createOrder = async (orderData, session) => {
         transactionId: razorpayPaymentId || `TXN${Date.now()}`,
         amount: amount
       },
+      subtotal: subtotal,
       totalAmount: amount,
       couponCode: couponCode,
-      discountAmount: discountAmount,
+      discountAmount: couponDisc,
       orderId: orderId,
       orderStatus: 'Processing'
     }], { session });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Layout } from '../layout/Layout';
 import { Button } from '../../ui/Button';
-import { ArrowRight, Download, Package, Truck, Check, Search } from 'lucide-react';
+import { ArrowRight, Download, Package, Truck, Check, Search, XCircle, ChevronDown as ChevronDownIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -36,7 +36,7 @@ import { Input } from '../../ui/Input';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '../../ui/pagination';
 import { debounce } from 'lodash';
 import { useSearchParams } from 'react-router-dom';
-import { userCancelOrderApi, userfetchOrdersApi, userReturnOrderApi } from '../../services/api/userApis/userOrderApi';
+import { userCancelOrderApi, userfetchOrdersApi, userReturnOrderApi, userCancelOrderItemApi } from '../../services/api/userApis/userOrderApi';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Orders() {
@@ -79,6 +79,23 @@ export default function Orders() {
     orderId: null 
   });
   const [cancelReason, setCancelReason] = useState('');
+
+  // Per-item cancel state
+  const [cancelItemConfirmDialog, setCancelItemConfirmDialog] = useState({
+    open: false,
+    orderId: null,
+    itemId: null,
+    itemName: '',
+    maxQuantity: 1
+  });
+  const [cancelItemDialog, setCancelItemDialog] = useState({
+    open: false,
+    orderId: null,
+    itemId: null,
+    maxQuantity: 1
+  });
+  const [cancelItemReason, setCancelItemReason] = useState('');
+  const [cancelItemQuantity, setCancelItemQuantity] = useState(1);
 
   // Create debounced search function
   const debouncedSearch = useCallback(
@@ -156,6 +173,43 @@ export default function Orders() {
       fetchOrders();
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to cancel order');
+    }
+  };
+
+  // Per-item cancel handlers
+  const handleCancelItemClick = (orderId, itemId, itemName, maxQty) => {
+    setCancelItemConfirmDialog({ open: true, orderId, itemId, itemName, maxQuantity: maxQty });
+  };
+
+  const handleCancelItemConfirmation = () => {
+    setCancelItemDialog({
+      open: true,
+      orderId: cancelItemConfirmDialog.orderId,
+      itemId: cancelItemConfirmDialog.itemId,
+      maxQuantity: cancelItemConfirmDialog.maxQuantity
+    });
+    setCancelItemQuantity(1);
+    setCancelItemConfirmDialog({ open: false, orderId: null, itemId: null, itemName: '', maxQuantity: 1 });
+  };
+
+  const handleCancelItemSubmit = async () => {
+    if (!cancelItemReason.trim()) {
+      toast.error('Please provide a reason for cancellation');
+      return;
+    }
+    if (!cancelItemQuantity || cancelItemQuantity < 1) {
+      toast.error('Please select a valid quantity to cancel');
+      return;
+    }
+    try {
+      await userCancelOrderItemApi(cancelItemDialog.orderId, cancelItemDialog.itemId, cancelItemReason, cancelItemQuantity);
+      toast.success(`${cancelItemQuantity} unit(s) cancelled successfully`);
+      setCancelItemDialog({ open: false, orderId: null, itemId: null, maxQuantity: 1 });
+      setCancelItemReason('');
+      setCancelItemQuantity(1);
+      fetchOrders();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to cancel item');
     }
   };
 
@@ -327,8 +381,43 @@ export default function Orders() {
                           onClick={() => handleCancelClick(order.orderId)}
                           className="hover:scale-105 transition-transform"
                         >
-                          Cancel
+                          Cancel Order
                         </Button>
+                      )}
+                      {/* Per-item cancel buttons for pending/processing orders */}
+                      {['pending', 'Processing'].includes(order.orderStatus) && order.items?.length > 1 && (
+                        <div className="w-full mt-2 space-y-1">
+                          <p className="text-xs text-gray-400 font-medium">Cancel individual items:</p>
+                          {order.items.map((item) => (
+                            !['Cancelled'].includes(item.status) && (
+                              <div key={item._id} className="flex items-center justify-between bg-gray-50 rounded px-2 py-1">
+                                <span className="text-xs text-gray-600 truncate max-w-[160px]">
+                                  {item.product?.name || 'Item'}
+                                  {item.cancelledQuantity > 0 && (
+                                    <span className="ml-1 text-gray-400">({item.quantity - item.cancelledQuantity} left)</span>
+                                  )}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 h-6 px-2 flex items-center gap-1"
+                                  onClick={() => {
+                                    const cancellable = item.quantity - (item.cancelledQuantity || 0);
+                                    handleCancelItemClick(
+                                      order.orderId,
+                                      item._id,
+                                      item.product?.name,
+                                      cancellable
+                                    );
+                                  }}
+                                >
+                                  <XCircle className="h-3 w-3" />
+                                  Cancel
+                                </Button>
+                              </div>
+                            )
+                          ))}
+                        </div>
                       )}
                       {order.orderStatus === 'Delivered' && (
                         <>
@@ -567,7 +656,129 @@ export default function Orders() {
           </DialogContent>
         </Dialog>
 
+
+        {/* Cancel Item — Step 1: Confirmation AlertDialog */}
+        <AlertDialog
+          open={cancelItemConfirmDialog.open}
+          onOpenChange={(open) => {
+            if (!open) setCancelItemConfirmDialog({ open: false, orderId: null, itemId: null, itemName: '' });
+          }}
+        >
+          <AlertDialogContent className="bg-white rounded-lg shadow-lg sm:max-w-[425px]">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-xl font-semibold text-gray-900">
+                Cancel Item
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-gray-500">
+                Are you sure you want to cancel{' '}
+                <span className="font-medium text-gray-800">"{cancelItemConfirmDialog.itemName}"</span>?
+                This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex justify-end gap-3 mt-6">
+              <AlertDialogCancel
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                onClick={() => setCancelItemConfirmDialog({ open: false, orderId: null, itemId: null, itemName: '' })}
+              >
+                No, keep item
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
+                onClick={handleCancelItemConfirmation}
+              >
+                Yes, cancel item
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Cancel Item — Step 2: Quantity + Reason Dialog */}
+        <Dialog
+          open={cancelItemDialog.open}
+          onOpenChange={(open) => {
+            if (!open) {
+              setCancelItemDialog({ open: false, orderId: null, itemId: null, maxQuantity: 1 });
+              setCancelItemReason('');
+              setCancelItemQuantity(1);
+            }
+          }}
+        >
+          <DialogContent className="bg-white rounded-lg shadow-lg sm:max-w-[425px] p-6">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-semibold text-gray-900">
+                Cancel Item
+              </DialogTitle>
+              <p className="text-sm text-gray-500 mt-2">
+                Select how many units to cancel and tell us why.
+              </p>
+            </DialogHeader>
+            <div className="mt-4 space-y-4">
+              {/* Quantity Selector */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700">
+                  Quantity to Cancel
+                  <span className="ml-1 text-gray-400 font-normal">(max {cancelItemDialog.maxQuantity})</span>
+                </Label>
+                <div className="flex items-center gap-3 mt-2">
+                  <button
+                    type="button"
+                    className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    onClick={() => setCancelItemQuantity(q => Math.max(1, q - 1))}
+                    disabled={cancelItemQuantity <= 1}
+                  >−</button>
+                  <span className="w-10 text-center font-semibold text-gray-800">{cancelItemQuantity}</span>
+                  <button
+                    type="button"
+                    className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    onClick={() => setCancelItemQuantity(q => Math.min(cancelItemDialog.maxQuantity, q + 1))}
+                    disabled={cancelItemQuantity >= cancelItemDialog.maxQuantity}
+                  >+</button>
+                  <span className="text-xs text-gray-500 ml-1">
+                    of {cancelItemDialog.maxQuantity} cancellable unit(s)
+                  </span>
+                </div>
+              </div>
+              {/* Reason */}
+              <div>
+                <Label htmlFor="cancelItemReasonOrders" className="text-sm font-medium text-gray-700">
+                  Reason for Cancellation
+                </Label>
+                <Textarea
+                  id="cancelItemReasonOrders"
+                  placeholder="Please provide details about why you're cancelling..."
+                  value={cancelItemReason}
+                  onChange={(e) => setCancelItemReason(e.target.value)}
+                  className="mt-2 min-h-[90px] w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+            </div>
+            <DialogFooter className="flex justify-end gap-3 mt-6">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCancelItemDialog({ open: false, orderId: null, itemId: null, maxQuantity: 1 });
+                  setCancelItemReason('');
+                  setCancelItemQuantity(1);
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Back
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleCancelItemSubmit}
+                disabled={!cancelItemReason.trim() || cancelItemQuantity < 1}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel {cancelItemQuantity} Unit{cancelItemQuantity > 1 ? 's' : ''}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Pagination */}
         {totalPages > 1 && (
+
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

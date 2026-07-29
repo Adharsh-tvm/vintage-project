@@ -5,6 +5,7 @@ import {
     getOrders,
     getOrderById,
     cancelOrder,
+    cancelOrderItem,
     returnOrder,
     pdfDownloader
 } from '../../controllers/user/userOrderController.js';
@@ -25,6 +26,9 @@ router.get('/:id', getOrderById);
 
 // Cancel order
 router.put('/:id/cancel', cancelOrder);
+
+// Cancel individual order item
+router.put('/:id/items/:itemId/cancel', cancelOrderItem);
 
 // Return order
 router.post('/:id/return', returnOrder);

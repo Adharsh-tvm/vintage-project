@@ -2,13 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Layout } from '../layout/Layout';
 import { Button } from '../../ui/Button';
-import { Package, Truck, Check, ArrowLeft, Download } from 'lucide-react';
+import { Package, Truck, Check, ArrowLeft, Download, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { downloadInvoiceApi, fetchOrderDetailsApi, userReturnOrderItemApi } from '../../services/api/userApis/userOrderApi';
+import { downloadInvoiceApi, fetchOrderDetailsApi, userReturnOrderItemApi, userCancelOrderItemApi } from '../../services/api/userApis/userOrderApi';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../ui/Dialog';
 import { Label } from '../../ui/Label';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../ui/Select';
 import { Textarea } from '../../ui/TextArea';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../ui/AlertDialog";
 
 export default function OrderDetails() {
   const { orderId } = useParams();
@@ -17,12 +27,32 @@ export default function OrderDetails() {
   const [returnDialog, setReturnDialog] = useState({
     open: false,
     orderId: null,
-    itemId: null
+    itemId: null,
+    maxQuantity: 1
   });
   const [returnForm, setReturnForm] = useState({
     reason: '',
-    additionalDetails: ''
+    additionalDetails: '',
+    quantity: 1
   });
+
+  // Cancel item state
+  const [cancelItemConfirmDialog, setCancelItemConfirmDialog] = useState({
+    open: false,
+    orderId: null,
+    itemId: null,
+    itemName: '',
+    maxQuantity: 1
+  });
+  const [cancelItemDialog, setCancelItemDialog] = useState({
+    open: false,
+    orderId: null,
+    itemId: null,
+    maxQuantity: 1
+  });
+  const [cancelItemReason, setCancelItemReason] = useState('');
+  const [cancelItemQuantity, setCancelItemQuantity] = useState(1);
+
   const returnReasons = [
     "Defective",
     "Not as described",
@@ -121,6 +151,10 @@ export default function OrderDetails() {
       toast.error('Please provide a reason for return');
       return;
     }
+    if (!returnForm.quantity || returnForm.quantity < 1) {
+      toast.error('Please select a valid quantity to return');
+      return;
+    }
 
     try {
       const response = await userReturnOrderItemApi(
@@ -130,13 +164,50 @@ export default function OrderDetails() {
       );
 
       if (response.data.success) {
-        toast.success('Return request submitted successfully');
-        setReturnDialog({ open: false, orderId: null, itemId: null });
-        setReturnForm({ reason: '', additionalDetails: '' });
-        fetchOrderDetails(); // Refresh order details
+        toast.success(response.data.message || 'Return request submitted successfully');
+        setReturnDialog({ open: false, orderId: null, itemId: null, maxQuantity: 1 });
+        setReturnForm({ reason: '', additionalDetails: '', quantity: 1 });
+        fetchOrderDetails();
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to submit return request');
+    }
+  };
+
+  // --- Cancel item handlers ---
+  const handleCancelItemClick = (ordId, itmId, itemName, maxQty) => {
+    setCancelItemConfirmDialog({ open: true, orderId: ordId, itemId: itmId, itemName, maxQuantity: maxQty });
+  };
+
+  const handleCancelItemConfirmation = () => {
+    setCancelItemDialog({
+      open: true,
+      orderId: cancelItemConfirmDialog.orderId,
+      itemId: cancelItemConfirmDialog.itemId,
+      maxQuantity: cancelItemConfirmDialog.maxQuantity
+    });
+    setCancelItemQuantity(1);
+    setCancelItemConfirmDialog({ open: false, orderId: null, itemId: null, itemName: '', maxQuantity: 1 });
+  };
+
+  const handleCancelItemSubmit = async () => {
+    if (!cancelItemReason.trim()) {
+      toast.error('Please provide a reason for cancellation');
+      return;
+    }
+    if (!cancelItemQuantity || cancelItemQuantity < 1) {
+      toast.error('Please select a valid quantity to cancel');
+      return;
+    }
+    try {
+      await userCancelOrderItemApi(cancelItemDialog.orderId, cancelItemDialog.itemId, cancelItemReason, cancelItemQuantity);
+      toast.success(`${cancelItemQuantity} unit(s) cancelled successfully`);
+      setCancelItemDialog({ open: false, orderId: null, itemId: null, maxQuantity: 1 });
+      setCancelItemReason('');
+      setCancelItemQuantity(1);
+      fetchOrderDetails();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to cancel item');
     }
   };
 
@@ -238,39 +309,109 @@ export default function OrderDetails() {
                             Color: {item.sizeVariant?.color}
                           </div>
                           <div className="text-gray-600">Quantity: {item.quantity}</div>
-                          {item.returnRequested && (
-                            <div className={`text-sm mt-2 ${item.returnStatus === 'Return Approved'
-                              ? 'text-green-600'
-                              : item.returnStatus === 'Return Rejected'
-                                ? 'text-red-600'
-                                : 'text-yellow-600'}`}
-                            >
-                              Return Status: {item.returnStatus}
+                          {item.returnedQuantity > 0 && (
+                            <div className="text-sm mt-1 text-green-600 font-medium">
+                              Returned: {item.returnedQuantity} of {item.quantity} unit(s) refunded
+                            </div>
+                          )}
+                          {item.returnRequested && item.returnStatus === 'Return Pending' && (
+                            <div className="text-sm mt-1 text-yellow-600 font-medium">
+                              Return Status: Pending ({item.returnQuantity || 1} unit(s) requested)
+                            </div>
+                          )}
+                          {item.returnStatus === 'Return Rejected' && (
+                            <div className="text-sm mt-1 text-red-600 font-medium">
+                              Return Status: Rejected
                             </div>
                           )}
                         </div>
-                        <div className="text-right space-y-2">
-                          <div className="font-medium text-gray-900">
-                            ₹{(item.price || 0).toFixed(2)}
+                          <div className="text-right space-y-1">
+                            {item.discountPrice && item.discountPrice < item.price ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <span className="line-through text-xs text-gray-400">₹{(item.price || 0).toFixed(2)}</span>
+                                <span className="font-medium text-gray-900">₹{(item.discountPrice || 0).toFixed(2)}</span>
+                              </div>
+                            ) : (
+                              <div className="font-medium text-gray-900">
+                                ₹{(item.price || 0).toFixed(2)}
+                              </div>
+                            )}
+                            <div className="text-sm font-semibold text-gray-700">
+                              Item Total: ₹{(item.finalPrice ?? ((item.discountPrice || item.price) * item.quantity)).toFixed(2)}
+                            </div>
+                            {item.couponDiscount > 0 && (
+                              <div className="text-xs text-green-600 font-medium">
+                                Coupon Discount: -₹{item.couponDiscount.toFixed(2)}
+                              </div>
+                            )}
+                            {/* Cancel Item Button */}
+                            {['pending', 'Processing'].includes(item.status) &&
+                              ['pending', 'Processing'].includes(order.orderStatus) && (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="mt-2 flex items-center gap-1 hover:scale-105 transition-transform"
+                                onClick={() => {
+                                  const cancellable = item.quantity - (item.cancelledQuantity || 0);
+                                  handleCancelItemClick(
+                                    order.orderId,
+                                    item._id,
+                                    item.product?.name,
+                                    cancellable
+                                  );
+                                }}
+                              >
+                                <XCircle className="h-3.5 w-3.5" />
+                                Cancel Item
+                                {item.cancelledQuantity > 0 && (
+                                  <span className="ml-1 text-xs opacity-80">
+                                    ({item.quantity - item.cancelledQuantity} left)
+                                  </span>
+                                )}
+                              </Button>
+                            )}
+                            {/* Cancelled badge */}
+                            {item.status === 'Cancelled' && (
+                              <div className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-1">
+                                <XCircle className="h-3 w-3" />
+                                Cancelled
+                              </div>
+                            )}
+                            {/* Return Item Button for Delivered items with returnable units remaining */}
+                            {(() => {
+                              const cancelledQty = item.cancelledQuantity || 0;
+                              const returnedQty = item.returnedQuantity || 0;
+                              const pendingReturnQty = (item.returnRequested && item.returnStatus === 'Return Pending') ? (item.returnQuantity || 0) : 0;
+                              const maxReturnable = item.quantity - cancelledQty - returnedQty - pendingReturnQty;
+
+                              if (order.orderStatus === 'Delivered' && maxReturnable > 0 && item.status !== 'Cancelled') {
+                                return (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-2 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                                    onClick={() => {
+                                      setReturnDialog({
+                                        open: true,
+                                        orderId: order.orderId,
+                                        itemId: item._id,
+                                        maxQuantity: maxReturnable
+                                      });
+                                      setReturnForm(prev => ({ ...prev, quantity: 1 }));
+                                    }}
+                                  >
+                                    Return Item
+                                    {maxReturnable < item.quantity && (
+                                      <span className="ml-1 text-xs opacity-80">
+                                        ({maxReturnable} left)
+                                      </span>
+                                    )}
+                                  </Button>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
-                          <div className="text-sm text-gray-500">
-                            Subtotal: ₹{((item.price || 0) * item.quantity).toFixed(2)}
-                          </div>
-                          {order.orderStatus === 'Delivered' && !item.returnRequested && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="mt-2 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
-                              onClick={() => setReturnDialog({
-                                open: true,
-                                orderId: order.orderId,
-                                itemId: item._id
-                              })}
-                            >
-                              Return Item
-                            </Button>
-                          )}
-                        </div>
                       </div>
                     </div>
                   </div>
@@ -346,13 +487,132 @@ export default function OrderDetails() {
             </div>
           </div>
 
+          {/* Cancel Item — Step 1: Confirmation AlertDialog */}
+          <AlertDialog
+            open={cancelItemConfirmDialog.open}
+            onOpenChange={(open) => {
+              if (!open) setCancelItemConfirmDialog({ open: false, orderId: null, itemId: null, itemName: '' });
+            }}
+          >
+            <AlertDialogContent className="bg-white rounded-lg shadow-lg sm:max-w-[425px]">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-xl font-semibold text-gray-900">
+                  Cancel Item
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-gray-500">
+                  Are you sure you want to cancel{' '}
+                  <span className="font-medium text-gray-800">"{cancelItemConfirmDialog.itemName}"</span>?
+                  This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter className="flex justify-end gap-3 mt-6">
+                <AlertDialogCancel
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                  onClick={() => setCancelItemConfirmDialog({ open: false, orderId: null, itemId: null, itemName: '' })}
+                >
+                  No, keep item
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
+                  onClick={handleCancelItemConfirmation}
+                >
+                  Yes, cancel item
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Cancel Item — Step 2: Reason + Quantity Dialog */}
+          <Dialog
+            open={cancelItemDialog.open}
+            onOpenChange={(open) => {
+              if (!open) {
+                setCancelItemDialog({ open: false, orderId: null, itemId: null, maxQuantity: 1 });
+                setCancelItemReason('');
+                setCancelItemQuantity(1);
+              }
+            }}
+          >
+            <DialogContent className="bg-white rounded-lg shadow-lg sm:max-w-[425px] p-6">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-semibold text-gray-900">
+                  Cancel Item
+                </DialogTitle>
+                <p className="text-sm text-gray-500 mt-2">
+                  Select how many units to cancel and tell us why.
+                </p>
+              </DialogHeader>
+              <div className="mt-4 space-y-4">
+                {/* Quantity Selector */}
+                <div>
+                  <Label className="text-sm font-medium text-gray-700">
+                    Quantity to Cancel
+                    <span className="ml-1 text-gray-400 font-normal">(max {cancelItemDialog.maxQuantity})</span>
+                  </Label>
+                  <div className="flex items-center gap-3 mt-2">
+                    <button
+                      type="button"
+                      className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      onClick={() => setCancelItemQuantity(q => Math.max(1, q - 1))}
+                      disabled={cancelItemQuantity <= 1}
+                    >−</button>
+                    <span className="w-10 text-center font-semibold text-gray-800">{cancelItemQuantity}</span>
+                    <button
+                      type="button"
+                      className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      onClick={() => setCancelItemQuantity(q => Math.min(cancelItemDialog.maxQuantity, q + 1))}
+                      disabled={cancelItemQuantity >= cancelItemDialog.maxQuantity}
+                    >+</button>
+                    <span className="text-xs text-gray-500 ml-1">
+                      of {cancelItemDialog.maxQuantity} cancellable unit(s)
+                    </span>
+                  </div>
+                </div>
+                {/* Reason */}
+                <div>
+                  <Label htmlFor="cancelItemReason" className="text-sm font-medium text-gray-700">
+                    Reason for Cancellation
+                  </Label>
+                  <Textarea
+                    id="cancelItemReason"
+                    placeholder="Please provide details about why you're cancelling..."
+                    value={cancelItemReason}
+                    onChange={(e) => setCancelItemReason(e.target.value)}
+                    className="mt-2 min-h-[90px] w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+              </div>
+              <DialogFooter className="flex justify-end gap-3 mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setCancelItemDialog({ open: false, orderId: null, itemId: null, maxQuantity: 1 });
+                    setCancelItemReason('');
+                    setCancelItemQuantity(1);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Back
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleCancelItemSubmit}
+                  disabled={!cancelItemReason.trim() || cancelItemQuantity < 1}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel {cancelItemQuantity} Unit{cancelItemQuantity > 1 ? 's' : ''}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           {/* Return Details Dialog */}
           <Dialog
             open={returnDialog.open}
             onOpenChange={(open) => {
               if (!open) {
-                setReturnDialog({ open: false, orderId: null, itemId: null });
-                setReturnForm({ reason: '', additionalDetails: '' });
+                setReturnDialog({ open: false, orderId: null, itemId: null, maxQuantity: 1 });
+                setReturnForm({ reason: '', additionalDetails: '', quantity: 1 });
               }
             }}
           >
@@ -363,6 +623,32 @@ export default function OrderDetails() {
                 </DialogTitle>
               </DialogHeader>
               <div className="mt-4 space-y-4">
+                {/* Quantity Selector */}
+                <div>
+                  <Label className="text-gray-700 text-sm font-medium">
+                    Quantity to Return
+                    <span className="ml-1 text-gray-400 font-normal">(max {returnDialog.maxQuantity})</span>
+                  </Label>
+                  <div className="flex items-center gap-3 mt-2">
+                    <button
+                      type="button"
+                      className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      onClick={() => setReturnForm(prev => ({ ...prev, quantity: Math.max(1, prev.quantity - 1) }))}
+                      disabled={returnForm.quantity <= 1}
+                    >−</button>
+                    <span className="w-10 text-center font-semibold text-gray-800">{returnForm.quantity}</span>
+                    <button
+                      type="button"
+                      className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      onClick={() => setReturnForm(prev => ({ ...prev, quantity: Math.min(returnDialog.maxQuantity, prev.quantity + 1) }))}
+                      disabled={returnForm.quantity >= returnDialog.maxQuantity}
+                    >+</button>
+                    <span className="text-xs text-gray-500 ml-1">
+                      of {returnDialog.maxQuantity} eligible unit(s)
+                    </span>
+                  </div>
+                </div>
+                {/* Reason */}
                 <div>
                   <Label htmlFor="reason" className="text-gray-700">Reason for Return *</Label>
                   <Select
@@ -400,8 +686,8 @@ export default function OrderDetails() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setReturnDialog({ open: false, orderId: null, itemId: null });
-                    setReturnForm({ reason: '', additionalDetails: '' });
+                    setReturnDialog({ open: false, orderId: null, itemId: null, maxQuantity: 1 });
+                    setReturnForm({ reason: '', additionalDetails: '', quantity: 1 });
                   }}
                   className="hover:bg-gray-100 transition-colors"
                 >
@@ -409,10 +695,10 @@ export default function OrderDetails() {
                 </Button>
                 <Button
                   onClick={handleReturnSubmit}
-                  disabled={!returnForm.reason.trim()}
+                  disabled={!returnForm.reason.trim() || returnForm.quantity < 1}
                   className="bg-green-600 hover:bg-green-700 text-white transition-colors"
                 >
-                  Submit Return Request
+                  Return {returnForm.quantity} Unit{returnForm.quantity > 1 ? 's' : ''}
                 </Button>
               </DialogFooter>
             </DialogContent>

@@ -237,7 +237,7 @@ export function Navbar() {
   };
 
   const navLinks = [
-    { label: 'Products', href: '/products' },
+    { label: '>', href: '/products' },
   ];
 
   // ── Styles ──────────────────────────────────────────────────────────────────

@@ -56,6 +56,50 @@ export default function Dashboard() {
     const [itemsPerPage] = useState(5);
     const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
     const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
+    const [topProducts, setTopProducts] = useState([]);
+    const [topCategories, setTopCategories] = useState([]);
+    const [topBrands, setTopBrands] = useState([]);
+
+    const fetchSalesData = async () => {
+        try {
+            setLoading(true);
+
+            const params = {
+                range: dateRange,
+                page: currentPage,
+                limit: itemsPerPage
+            };
+
+            if (dateRange === 'custom') {
+                params.startDate = customStartDate.toISOString();
+                params.endDate = customEndDate.toISOString();
+            }
+
+            setSearchParams(params);
+
+            const response = await fetchSalesDataApi(params);
+            if (response.data) {
+                const { stats, salesData, transactions, pagination, topProducts, topCategories, topBrands } = response.data;
+                setStats(stats);
+                setSalesData(salesData);
+                setTransactions(transactions);
+                setTotalPages(pagination.totalPages);
+                setCurrentPage(pagination.currentPage);
+                setTopProducts(topProducts || []);
+                setTopCategories(topCategories || []);
+                setTopBrands(topBrands || []);
+            }
+        } catch (error) {
+            console.error('Error details:', error.response || error);
+            toast.error(error.response?.data?.message || 'Failed to fetch sales data');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchSalesData();
+    }, [currentPage, dateRange, customStartDate, customEndDate, itemsPerPage]);
 
     const handleDownloadPDF = async () => {
         try {

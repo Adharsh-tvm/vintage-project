@@ -142,7 +142,7 @@ function Wallet() {
                 color: '#4caf50',
                 textShadow: '0 2px 4px rgba(0,0,0,0.2)'
               }}>
-                ₹{wallet.balance.toLocaleString('en-IN')}
+                ₹{(wallet?.balance || 0).toLocaleString('en-IN')}
               </Typography>
             </CardContent>
           </Card>
@@ -233,7 +233,7 @@ function Wallet() {
                             color: transaction.type === 'credit' ? 'success.main' : 'error.main',
                             fontWeight: 600
                           }}>
-                            ₹{transaction.amount.toLocaleString('en-IN')}
+                            ₹{(transaction?.amount || 0).toLocaleString('en-IN')}
                           </TableCell>
                         </TableRow>
                       ))

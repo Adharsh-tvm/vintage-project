@@ -288,7 +288,7 @@ const ProductListing = () => {
     setActiveImage(prev => ({ ...prev, [productId]: imageUrl }));
   };
 
-  const formatPrice = (price) => `₹${(price).toFixed(0)}`;
+  const formatPrice = (price) => `₹${(Number(price) || 0).toFixed(0)}`;
 
   const getAllImages = (product) => {
     const variantWithSubImages = product.variants.find(v => v.subImages.length > 0);
@@ -856,7 +856,7 @@ const ProductListing = () => {
                           </div>
                           <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.1rem' }}>{product.category?.name}</div>
                           <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#111827', marginTop: '0.25rem' }}>
-                            ₹{Math.min(...product.variants.map(v => v.price)).toLocaleString()}
+                            ₹{product.variants?.length > 0 ? (Math.min(...product.variants.map(v => v.price || 0)) || 0).toLocaleString() : 0}
                           </div>
                         </div>
                         <ChevronRight size={16} color="#d1d5db" style={{ flexShrink: 0 }} />

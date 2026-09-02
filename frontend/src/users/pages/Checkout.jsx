@@ -124,26 +124,28 @@ function AddressForm({ onAddressAdded, onClose }) {
 }
 
 function PriceDisplay({ item }) {
-  const hasValidDiscount = item.variant.discountPrice && 
-                          item.variant.discountPrice > 0 && 
-                          item.variant.discountPrice < item.variant.price;
+  const price = item?.variant?.price || 0;
+  const discountPrice = item?.variant?.discountPrice || 0;
+  const quantity = item?.quantity || 1;
+
+  const hasValidDiscount = discountPrice > 0 && discountPrice < price;
   
   const itemTotal = hasValidDiscount 
-    ? item.variant.discountPrice * item.quantity
-    : item.variant.price * item.quantity;
+    ? discountPrice * quantity
+    : price * quantity;
 
   return (
     <div className="text-right">
       <div className="font-medium">
-      ₹{itemTotal.toFixed(2)}
+      ₹{(itemTotal || 0).toFixed(2)}
       </div>
       {hasValidDiscount && (
         <div className="text-sm">
           <span className="text-gray-500 line-through">
-          ₹{(item.variant.price * item.quantity).toFixed(2)}
+          ₹{((price || 0) * (quantity || 1)).toFixed(2)}
           </span>
           <span className="text-green-600 ml-2">
-            {Math.round((item.variant.price - item.variant.discountPrice) / item.variant.price * 100)}% OFF
+            {Math.round((price - discountPrice) / price * 100)}% OFF
           </span>
         </div>
       )}
@@ -209,8 +211,9 @@ function Checkout() {
 
   const fetchWalletBalance = async () => {
     try {
-      const response = await fetchCheckoutWalletBalanceApi()
-      setWalletBalance(response.data.balance);
+      const response = await fetchCheckoutWalletBalanceApi();
+      const balance = response.data?.wallet?.balance ?? response.data?.balance ?? 0;
+      setWalletBalance(balance);
     } catch (error) {
       toast.error('Failed to fetch wallet balance');
     }
@@ -622,22 +625,22 @@ function Checkout() {
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span>Subtotal</span>
-                    <span>₹{subtotal.toFixed(2)}</span>
+                    <span>₹{(subtotal || 0).toFixed(2)}</span>
                   </div>
                   {couponDiscount > 0 && (
                     <div className="flex justify-between text-green-600">
                       <span>Coupon Discount</span>
-                      <span>-₹{couponDiscount.toFixed(2)}</span>
+                      <span>-₹{(couponDiscount || 0).toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between">
                     <span>Shipping</span>
-                    <span>₹{shipping.toFixed(2)}</span>
+                    <span>₹{(shipping || 0).toFixed(2)}</span>
                   </div>
                   <Separator />
                   <div className="flex justify-between font-bold">
                     <span>Total</span>
-                    <span>₹{(total - couponDiscount).toFixed(2)}</span>
+                    <span>₹{((total || 0) - (couponDiscount || 0)).toFixed(2)}</span>
                   </div>
                 </div>
               </CardContent>
@@ -699,16 +702,16 @@ function Checkout() {
               <div className="bg-gray-50 p-3.5 rounded-lg space-y-2 text-sm border border-gray-200 mt-2">
                 <div className="flex justify-between text-gray-700">
                   <span>Order Total:</span>
-                  <span className="font-semibold text-gray-900">₹{(total - couponDiscount).toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900">₹{((total || 0) - (couponDiscount || 0)).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-gray-700">
                   <span>Current Wallet Balance:</span>
-                  <span className="font-semibold text-blue-600">₹{walletBalance.toFixed(2)}</span>
+                  <span className="font-semibold text-blue-600">₹{(walletBalance || 0).toFixed(2)}</span>
                 </div>
                 <Separator className="my-1" />
                 <div className="flex justify-between text-sm font-bold pt-1">
                   <span>Balance After Purchase:</span>
-                  <span className="text-green-600">₹{(walletBalance - (total - couponDiscount)).toFixed(2)}</span>
+                  <span className="text-green-600">₹{((walletBalance || 0) - ((total || 0) - (couponDiscount || 0))).toFixed(2)}</span>
                 </div>
               </div>
             </AlertDialogDescription>

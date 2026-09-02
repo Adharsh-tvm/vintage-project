@@ -284,7 +284,7 @@ export default function OrderDetails() {
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-semibold">Order Summary</h2>
                 <div className="text-lg font-semibold text-green-600">
-                  Total: ₹{order?.totalAmount?.toFixed(2)}
+                  Total: ₹{(order?.totalAmount || 0).toFixed(2)}
                 </div>
               </div>
               <div className="grid gap-4">
@@ -337,11 +337,11 @@ export default function OrderDetails() {
                               </div>
                             )}
                             <div className="text-sm font-semibold text-gray-700">
-                              Item Total: ₹{(item.finalPrice ?? ((item.discountPrice || item.price) * item.quantity)).toFixed(2)}
+                              Item Total: ₹{(item.finalPrice ?? (((item.discountPrice || item.price || 0)) * (item.quantity || 1))).toFixed(2)}
                             </div>
                             {item.couponDiscount > 0 && (
                               <div className="text-xs text-green-600 font-medium">
-                                Coupon Discount: -₹{item.couponDiscount.toFixed(2)}
+                                Coupon Discount: -₹{(item.couponDiscount || 0).toFixed(2)}
                               </div>
                             )}
                             {/* Cancel Item Button */}
@@ -453,7 +453,7 @@ export default function OrderDetails() {
                   )}
                   <div className="space-y-1">
                     <p className="text-gray-600">Total Amount</p>
-                    <p className="font-medium text-green-600">₹{order?.totalAmount?.toFixed(2)}</p>
+                    <p className="font-medium text-green-600">₹{(order?.totalAmount || 0).toFixed(2)}</p>
                   </div>
                 </div>
               </div>
@@ -463,25 +463,25 @@ export default function OrderDetails() {
             <div className="p-6 bg-gradient-to-r from-green-50 to-emerald-50">
               <h2 className="text-xl font-semibold mb-4">Discount Details</h2>
               <div className="space-y-3">
-                {order.totalDiscount > 0 && (
+                {(order?.totalDiscount || 0) > 0 && (
                   <div className="flex justify-between text-green-600 font-medium">
                     <span>Total Savings</span>
-                    <span>-₹{order.totalDiscount.toFixed(2)}</span>
+                    <span>-₹{(order?.totalDiscount || 0).toFixed(2)}</span>
                   </div>
                 )}
 
-                {order.couponCode && (
+                {order?.couponCode && (
                   <div className="text-sm text-gray-600 bg-white p-3 rounded-lg shadow-sm">
                     <span>Applied Coupon: {order.couponCode}</span>
-                    {order.discountAmount > 0 && (
-                      <span className="ml-2 text-green-600">(Saved ₹{order.discountAmount.toFixed(2)})</span>
+                    {(order?.discountAmount || 0) > 0 && (
+                      <span className="ml-2 text-green-600">(Saved ₹{(order?.discountAmount || 0).toFixed(2)})</span>
                     )}
                   </div>
                 )}
 
                 <div className="flex justify-between font-bold text-lg pt-2 border-t border-green-100">
                   <span>Final Amount</span>
-                  <span className="text-green-600">₹{order.totalAmount.toFixed(2)}</span>
+                  <span className="text-green-600">₹{(order?.totalAmount || 0).toFixed(2)}</span>
                 </div>
               </div>
             </div>

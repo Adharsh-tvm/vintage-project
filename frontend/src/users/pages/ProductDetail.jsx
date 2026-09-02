@@ -841,8 +841,10 @@ export default function ProductDetail() {
             <h2 className="text-2xl font-bold mb-6">You May Also Like</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {relatedProducts.map((relatedProduct) => {
-                const lowestPrice = Math.min(...relatedProduct.variants.map(v => v.price));
-                const mainImage = relatedProduct.variants[0]?.mainImage;
+                const lowestPrice = relatedProduct.variants?.length > 0
+                  ? Math.min(...relatedProduct.variants.map(v => v.price || 0))
+                  : 0;
+                const mainImage = relatedProduct.variants?.[0]?.mainImage;
 
                 return (
                   <div
@@ -863,7 +865,7 @@ export default function ProductDetail() {
                           {relatedProduct.name}
                         </h3>
                         <p className="text-sm font-medium text-gray-900">
-                          ₹{lowestPrice.toFixed(2)}
+                          ₹{(Number(lowestPrice) && isFinite(lowestPrice) ? lowestPrice : 0).toFixed(2)}
                         </p>
                       </div>
                       <div className="flex items-center justify-between text-sm text-gray-500">

@@ -335,7 +335,7 @@ export default function UserDashboard() {
                               </div>
                             </div>
                             <div className="mt-2 md:mt-0 md:text-right">
-                              <p className="font-medium">${order.total.toFixed(2)}</p>
+                              <p className="font-medium">${(Number(order.total ?? order.totalAmount) || 0).toFixed(2)}</p>
                               <p className="text-sm text-gray-500">{order.items} items</p>
                             </div>
                             <Button

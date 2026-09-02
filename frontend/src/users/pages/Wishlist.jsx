@@ -129,7 +129,7 @@ export default function Wishlist() {
       return null;
     }
 
-    const lowestPrice = item.variant.price;
+    const lowestPrice = item.variant?.price || 0;
     const isOutOfStock = item.variant.stock === 0;
 
     return (
@@ -204,7 +204,7 @@ export default function Wishlist() {
           <div>
             {/* Price */}
             <div className="text-xs font-bold text-gray-900 mb-2">
-              ₹{lowestPrice.toLocaleString()}
+              ₹{(lowestPrice || 0).toLocaleString()}
             </div>
 
             {/* Action */}

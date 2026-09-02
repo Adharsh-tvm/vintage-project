@@ -365,7 +365,7 @@ export default function Orders() {
                         {order.items?.length} items
                       </div>
                       <div className="text-sm font-medium text-green-600">
-                        ₹{order.totalAmount.toFixed(2)}
+                        ₹{(Number(order.totalAmount ?? order.total) || 0).toFixed(2)}
                       </div>
                       <div className="flex items-center gap-2">
                         {getStatusIcon(order.orderStatus)}

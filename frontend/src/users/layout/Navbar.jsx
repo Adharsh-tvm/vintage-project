@@ -392,7 +392,7 @@ export function Navbar() {
                           </div>
                           <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{product.category?.name}</div>
                           <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#111827', marginTop: '0.125rem' }}>
-                            ₹{Math.min(...product.variants.map(v => v.price)).toLocaleString()}
+                            ₹{product.variants?.length > 0 ? (Math.min(...product.variants.map(v => v.price || 0)) || 0).toLocaleString() : 0}
                           </div>
                         </div>
                       </div>

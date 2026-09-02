@@ -38,7 +38,15 @@ export const getAllOrders = async (req, res) => {
 
     // Fetch orders with filters, sorting and pagination
     const orders = await Order.find(filterQuery)
-      .populate('user', 'firstname lastname name fullName email')
+      .populate('user', 'firstname lastname name fullName email phone')
+      .populate({
+        path: 'items.product',
+        select: 'name images brand'
+      })
+      .populate({
+        path: 'items.sizeVariant',
+        select: 'size color price discountPrice mainImage'
+      })
       .sort(sortObj)
       .skip((page - 1) * limit)
       .limit(limit);
@@ -185,10 +193,14 @@ export const getReturnRequests = async (req, res) => {
 
     // Fetch returns with filters and pagination
     const returns = await Order.find(filterQuery)
-      .populate('user', 'firstname lastname email')
+      .populate('user', 'firstname lastname name fullName email phone')
       .populate({
         path: 'items.product',
-        select: 'name images'
+        select: 'name images brand'
+      })
+      .populate({
+        path: 'items.sizeVariant',
+        select: 'size color price discountPrice mainImage'
       })
       .sort({ createdAt: -1 })
       .skip(skip)

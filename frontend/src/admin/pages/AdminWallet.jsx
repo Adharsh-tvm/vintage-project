@@ -93,7 +93,7 @@ function AdminWallet() {
       title: 'Amount',
       dataIndex: 'amount',
       key: 'amount',
-      render: (amount) => `₹${amount.toFixed(2)}`
+      render: (amount) => `₹${(amount || 0).toFixed(2)}`
     },
     {
       title: 'Actions',
@@ -116,8 +116,8 @@ function AdminWallet() {
         <h1 className="text-2xl font-bold">Wallet Transactions</h1>
         <div className="bg-white p-4 rounded-lg shadow">
           <p className="text-sm text-gray-600">Total Wallet Amount</p>
-          <p className={`text-xl font-bold ${totalWalletAmount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            ₹{totalWalletAmount.toFixed(2)}
+          <p className={`text-xl font-bold ${(totalWalletAmount || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            ₹{(totalWalletAmount || 0).toFixed(2)}
           </p>
         </div>
       </div> */}
@@ -153,7 +153,7 @@ function AdminWallet() {
               <p>Type: <Tag color={selectedTransaction.type === 'credit' ? 'green' : 'red'}>
                 {selectedTransaction.type.toUpperCase()}
               </Tag></p>
-              <p>Amount: ₹{selectedTransaction.amount.toFixed(2)}</p>
+              <p>Amount: ₹{(selectedTransaction.amount || 0).toFixed(2)}</p>
               <p>Description: {selectedTransaction.description}</p>
             </div>
           </div>

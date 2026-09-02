@@ -89,7 +89,7 @@ export function FeaturedProducts() {
                 </Link>
                 <p className="mt-1 text-sm text-gray-500 line-clamp-2">{product.description}</p>
                 <div className="mt-2 flex justify-between items-center">
-                  <p className="font-semibold text-gray-900">${product.price.toFixed(2)}</p>
+                  <p className="font-semibold text-gray-900">${(product.price || 0).toFixed(2)}</p>
                   <div className="flex items-center">
                     {[...Array(5)].map((_, i) => (
                       <Star key={i} className={`w-4 h-4 ${i < Math.floor(product.rating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
